@@ -1,0 +1,36 @@
+<project name="hollowwrench" default="all" basedir=".">
+  <target name="clean">
+    <delete dir="build"/>
+  </target>
+  <target name="init" xmlns:ivy="antlib:org.apache.ivy.ant">
+    <property name="ivy.version" value="2.4.0"/>
+    <get
+	src="http://search.maven.org/remotecontent?filepath=org/apache/ivy/ivy/${ivy.version}/ivy-${ivy.version}.jar"
+	dest="${basedir}/ivy.jar"
+	skipexisting="yes"
+	/>
+    <taskdef resource="org/apache/ivy/ant/antlib.xml">
+      <classpath>
+	<fileset dir="${basedir}" includes="ivy.jar"/>
+      </classpath>
+    </taskdef>
+  </target>
+  <target name="cobertura" depends="init" xmlns:ivy="antlib:org.apache.ivy.ant">
+    <ivy:resolve>
+      <dependency org="net.sourceforge.cobertura" name="cobertura" rev="1.9.4"/>
+    </ivy:resolve>
+    <mkdir dir="build/cobertura/lib"/>
+    <ivy:retrieve pattern="build/cobertura/lib/[artifact]-[conf].[ext]"/>
+    <taskdef resource="tasks.properties">
+      <classpath>
+	<fileset dir="build/cobertura/lib"/>
+      </classpath>
+    </taskdef>
+  </target>
+  <target name="junit" depends="init" xmlns:ivy="antlib:org.apache.ivy.ant">
+  </target>
+  <target name="e2e-test" depends="cobertura,junit">
+  </target>
+  <target name="all" depends="clean,init,e2e-test">
+  </target>
+</project>
