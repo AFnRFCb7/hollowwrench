@@ -1,36 +1,270 @@
 <project name="hollowwrench" default="all" basedir=".">
-  <target name="clean">
+  <target name="clean" description="Clean the workspace.">
     <delete dir="build"/>
   </target>
-  <target name="init" xmlns:ivy="antlib:org.apache.ivy.ant">
+  <target name="init" xmlns:ivy="antlib:org.apache.ivy.ant" description="Download and configure ivy.">
     <property name="ivy.version" value="2.4.0"/>
     <get
 	src="http://search.maven.org/remotecontent?filepath=org/apache/ivy/ivy/${ivy.version}/ivy-${ivy.version}.jar"
 	dest="${basedir}/ivy.jar"
 	skipexisting="yes"
 	/>
-    <taskdef resource="org/apache/ivy/ant/antlib.xml">
+    <taskdef
+	resource="org/apache/ivy/ant/antlib.xml"
+	uri="antlib:org.apache.ivy.ant"
+	>
       <classpath>
 	<fileset dir="${basedir}" includes="ivy.jar"/>
       </classpath>
     </taskdef>
+    <ivy:settings/>
   </target>
-  <target name="cobertura" depends="init" xmlns:ivy="antlib:org.apache.ivy.ant">
+  <target name="cobertura" depends="init" xmlns:ivy="antlib:org.apache.ivy.ant" description="Install cobertura.">
     <ivy:resolve>
       <dependency org="net.sourceforge.cobertura" name="cobertura" rev="1.9.4"/>
     </ivy:resolve>
-    <mkdir dir="build/cobertura/lib"/>
-    <ivy:retrieve pattern="build/cobertura/lib/[artifact]-[conf].[ext]"/>
-    <taskdef resource="tasks.properties">
-      <classpath>
-	<fileset dir="build/cobertura/lib"/>
-      </classpath>
+    <mkdir dir="${basedir}/build/cobertura/lib"/>
+    <ivy:retrieve pattern="${basedir}/build/cobertura/lib/[conf]-[artifact]-[type]-[revision].[ext]"/>
+    <path id="cobertura-deps">
+      <fileset dir="${basedir}/build/cobertura/lib"/>
+    </path>
+    <taskdef
+	resource="tasks.properties"
+	classpathref="cobertura-deps"
+	/>
+  </target>
+  <target name="checkstyle" depends="init" xmlns:ivy="antlib:org.apache.ivy.ant" description="Install and run checkstyle.">
+    <ivy:resolve>
+      <dependency org="checkstyle" name="checkstyle" rev="5.0"/>
+    </ivy:resolve>
+    <mkdir dir="${basedir}/build/checkstyle/lib"/>
+    <ivy:retrieve pattern="${basedir}/build/checkstyle/lib/[conf]-[artifact]-[type]-[revision].[ext]"/>
+    <taskdef
+	name="checkstyle"
+	classname="com.puppycrawl.tools.checkstyle.CheckStyleTask"
+	>
+	<classpath>
+          <fileset dir="${basedir}/build/checkstyle/lib"/>
+	</classpath>
     </taskdef>
+    <checkstyle config="${basedir}/checks.xml">
+      <fileset dir="src"/>
+    </checkstyle>
   </target>
-  <target name="junit" depends="init" xmlns:ivy="antlib:org.apache.ivy.ant">
+  <target name="junit" depends="init" xmlns:ivy="antlib:org.apache.ivy.ant" description="Install junit.">
+    <ivy:resolve>
+      <dependency org="junit" name="junit" rev="4.12"/>
+      <dependency org="org.apache.ant" name="ant-junit" rev="1.9.6"/>
+    </ivy:resolve>
+    <mkdir dir="${basedir}/build/junit/lib"/>
+    <ivy:retrieve pattern="${basedir}/build/junit/lib/[conf]-[artifact]-[type]-[revision].[ext]"/>
+    <path id="junit-deps">
+      <fileset dir="${basedir}/build/junit/lib"/>
+    </path>
+    <taskdef
+	name="junit"
+	classname="org.apache.tools.ant.taskdefs.optional.junit.JUnitTask"
+	classpathref="junit-deps"
+	/>
+    <taskdef
+	name="junitreport"
+	classname="org.apache.tools.ant.taskdefs.optional.junit.XMLResultAggregator"
+	classpathref="junit-deps"
+	/>
   </target>
-  <target name="e2e-test" depends="cobertura,junit">
+  <target name="guava" depends="init" xmlns:ivy="antlib:org.apache.ivy.ant" description="Install guava">
+    <mkdir dir="${basedir}/build/guava/lib"/>
+    <ivy:resolve>
+      <dependency org="com.google.guava" name="guava" rev="19.0"/>
+    </ivy:resolve>
+    <mkdir dir="${basedir}/build/guava/lib"/>
+    <ivy:retrieve pattern="${basedir}/build/guava/lib/[conf]-[artifact]-[type]-[revision].[ext]"/>
   </target>
-  <target name="all" depends="clean,init,e2e-test">
+  <target name="e2e-test" depends="junit,cobertura,guava" description="Run e2e tests">
+    <mkdir dir="${basedir}/build/e2e-test/classes"/>
+    <javac
+	srcdir="${basedir}/src/main"
+	destdir="${basedir}/build/e2e-test/classes"
+	debug="yes"
+	debuglevel="lines,vars,source"
+	source="1.6"
+	target="1.6"
+	>
+    </javac>
+    <cobertura-instrument
+	datafile="${basedir}/build/e2e-test/cobertura.ser"
+	todir="${basedir}/build/e2e-test/instrumented"
+	>
+      <fileset dir="${basedir}/build/e2e-test/classes"/>
+    </cobertura-instrument>
+    <mkdir dir="${basedir}/build/e2e-test/classes.cobertura"/>
+    <javac
+	srcdir="${basedir}/src/covered"
+	destdir="${basedir}/build/e2e-test/classes.cobertura"
+	debug="yes"
+	debuglevel="lines,vars,source"
+	source="1.6"
+	target="1.6"
+	>
+      <classpath>
+	<dirset dir="${basedir}/build/e2e-test/classes"/>
+	<path refid="cobertura-deps"/>
+      </classpath>
+    </javac>
+    <mkdir dir="${basedir}/build/e2e-test/classes.junit"/>
+    <javac
+	srcdir="${basedir}/src/e2e-test"
+	destdir="${basedir}/build/e2e-test/classes.junit"
+	debug="yes"
+	debuglevel="lines,vars,source"
+	source="1.6"
+	target="1.6"
+	>
+      <classpath>
+	<dirset dir="${basedir}/build/e2e-test/classes"/>
+	<fileset dir="${basedir}/build/guava/lib"/>
+	<path refid="junit-deps"/>
+      </classpath>
+    </javac>    
+    <mkdir dir="${basedir}/build/e2e-test/junit"/>
+    <path id="e2e.path">
+      <dirset dir="${basedir}/build/e2e-test" includes="instrumented"/>
+      <dirset dir="${basedir}/build/e2e-test" includes="classes"/>
+      <dirset dir="${basedir}/build/e2e-test" includes="classes.cobertura"/>
+      <dirset dir="${basedir}/build/e2e-test" includes="classes.junit"/>
+      <path refid="cobertura-deps"/>
+    </path>
+    <pathconvert property="e2e.path" refid="e2e.path">
+    </pathconvert>
+    <junit
+	fork="yes"
+	errorproperty="e2e.junit.error"
+	failureproperty="e2e.junit.failure"
+	printSummary="yes"
+	>
+      <sysproperty
+	  key="net.sourceforge.cobertura.datafile"
+          file="${basedir}/build/e2e-test/cobertura.ser"
+	  />
+      <sysproperty
+	  key="e2e.path"
+          path="${e2e.path}"
+	  />
+      <sysproperty
+	  key="e2e.java"
+          path="${java.home}/bin/java"
+	  />
+      <batchtest todir="${basedir}/build/e2e-test/junit">
+	<fileset dir="${basedir}/src/e2e-test"/>
+	<formatter type="xml"/>
+      </batchtest>
+      <classpath>
+	<dirset dir="${basedir}/build/e2e-test/instrumented"/>
+	<dirset dir="${basedir}/build/e2e-test/classes"/>
+	<dirset dir="${basedir}/build/e2e-test/classes.cobertura"/>
+	<dirset dir="${basedir}/build/e2e-test/classes.junit"/>
+	<fileset dir="${basedir}/build/guava/lib"/>
+	<path refid="junit-deps"/>
+	<path refid="cobertura-deps"/>
+      </classpath>
+    </junit>
+    <mkdir dir="${basedir}/build/e2e-test/junitreport/xml"/>
+    <mkdir dir="${basedir}/build/e2e-test/junitreport/report"/>
+    <junitreport todir="${basedir}/build/e2e-test/junitreport/xml">
+      <fileset dir="${basedir}/build/e2e-test/junit"/>
+      <report
+	  format="frames"
+	  todir="${basedir}/build/e2e-test/junitreport/report"
+      />
+    </junitreport>
+    <mkdir dir="${basedir}/build/e2e-test/cobertura"/>
+    <cobertura-report
+	datafile="${basedir}/build/e2e-test/cobertura.ser"
+	destdir="${basedir}/build/e2e-test/cobertura"
+	>
+      <fileset dir="${basedir}/src/main"/>
+    </cobertura-report>
+    <cobertura-check
+	datafile="${basedir}/build/e2e-test/cobertura.ser"
+	haltonfailure="no"
+	failureproperty="e2e.cobertura.failure"
+	branchrate="100"
+	linerate="100"
+	packagebranchrate="100"
+	packagelinerate="100"
+	totalbranchrate="100"
+	totallinerate="100"
+	/>
+    <fail message="There was an error in the junit e2e tests." if="e2e.junit.error"/>
+    <fail message="There was a failure in the junit e2e tests." if="e2e.junit.failure"/>
+    <fail message="There was a failure in the junit e2e test coverage" if="e2e.cobertura.failure"/>
+  </target>
+  <target name="mutation-test" depends="guava,junit,cobertura" description="Run mutation tests. (does not work)">
+    <mkdir dir="${basedir}/build/mutation-test/classes"/>
+    <javac destdir="${basedir}/build/mutation-test/classes"
+	   debug="yes"
+	   debuglevel="lines,vars,source"
+	   source="1.6"
+	   target="1.6"
+	   >
+      <src>
+	<dirset dir="${basedir}/src/main"/>
+	<dirset dir="${basedir}/src/e2e-test"/>
+      </src>
+      <classpath>
+	<fileset dir="${basedir}/build/junit/lib"/>
+	<fileset dir="${basedir}/build/cobertura/lib"/>
+	<fileset dir="${basedir}/build/guava/lib"/>
+      </classpath>
+    </javac>
+    <path id="target.path">
+      <dirset dir="${basedir}/build/mutation-test/classes"/>
+      <fileset dir="${basedir}/build/junit/lib"/>
+      <fileset dir="${basedir}/build/cobertura/lib"/>
+      <fileset dir="${basedir}/build/guava/lib"/>
+    </path>
+    <mkdir dir="${basedir}/mutation-test/lib"/>
+    <property name="pitest.version" value="1.1.8"/>
+    <get
+	src="https://github.com/hcoles/pitest/releases/download/pitest-parent-${pitest.version}/pitest-${pitest.version}.jar"
+	dest="${basedir}/mutation-test/lib/pitest.jar"
+	/>
+    <get
+	src="https://github.com/hcoles/pitest/releases/download/pitest-parent-${pitest.version}/pitest-ant-${pitest.version}.jar"
+	dest="${basedir}/mutation-test/lib/pitest-ant.jar"
+	/>
+    <path id="pit.path">
+      <fileset dir="${basedir}/mutation-test/lib"/>
+    </path>
+    <taskdef name="pitest" classname="org.pitest.ant.PitestTask" classpathref="pit.path"/>
+    <mkdir dir="${basedir}/mutation-test/report"/>
+    <pitest
+	pitClasspath="pit.path"
+	classPath="target.path"
+	targetClasses="hollowwrench"
+	targetTests="hollowwrench.test"
+	reportDir="${basedir}/mutation-test/report"
+	sourceDir="${basedir}/src/main"
+	/>
+  </target>
+  <target name="dist" description="Create an executable.">
+    <mkdir dir="${basedir}/build/dist/classes"/>
+    <javac destdir="${basedir}/build/dist/classes">
+      <src>
+	<dirset dir="${basedir}/src/main"/>
+      </src>
+    </javac>
+    <jar
+	destfile="${basedir}/build/dist/${ant.project.name}.jar"
+	basedir="${basedir}/build/dist/classes"
+	compress="yes"
+	level="9"
+	>
+      <manifest>
+	<attribute name="Main-Class" value="hollowwrench.Main"/>
+      </manifest>
+    </jar>
+  </target>
+  <target name="all" depends="clean,init,dist,checkstyle,e2e-test">
   </target>
 </project>
